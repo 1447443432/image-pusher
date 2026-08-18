@@ -44,6 +44,8 @@ if [[ "$PUBLISH" == true ]]; then
   digest="$(docker buildx imagetools inspect "$TARGET_IMAGE" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
 fi
 mkdir -p "$OUTPUT_DIR"
+package_records_file="$(mktemp)"
+trap 'rm -f "$package_records_file"' EXIT
 platform_json='['
 for platform in "${platform_list[@]}"; do
   [[ -z "$platform" ]] && continue
@@ -65,14 +67,54 @@ PY
 
 if [[ "$PACKAGE" == true ]]; then
   [[ "$PUBLISH" == true ]] || die 'PACKAGE=true requires PUBLISH=true'
+  package_base="$(python3 - "$TARGET_IMAGE" <<'PY'
+import re, sys
+ref = sys.argv[1].rsplit("/", 1)[-1]
+name, tag = ref.rsplit(":", 1) if ":" in ref else (ref, "latest")
+print(re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{name}_{tag}"))
+PY
+)"
   for platform in "${normalized[@]}"; do
     arch="${platform#linux/}"
-    archive="$OUTPUT_DIR/$(echo "$TARGET_IMAGE" | tr '/:' '__')-$arch.tar.gz"
+    archive_name="$package_base"
+    [[ "${#normalized[@]}" -gt 1 ]] && archive_name+="_$arch"
+    archive_name+=".tar.gz"
+    archive="$OUTPUT_DIR/$archive_name"
     log "packaging $TARGET_IMAGE ($platform) -> $archive"
     docker pull --platform "$platform" "$TARGET_IMAGE" >/dev/null
     docker save "$TARGET_IMAGE" | gzip -9 > "$archive"
+    sha256="$(sha256sum "$archive" | awk '{print $1}')"
+    size="$(wc -c < "$archive" | tr -d ' ')"
+    printf '%s\t%s\t%s\t%s\n' "$arch" "$archive_name" "$size" "$sha256" >> "$package_records_file"
   done
 fi
+
+IMAGE_DIGEST="$digest" PLATFORM_JSON="$platform_json" PACKAGE_RECORDS_FILE="$package_records_file" MANIFEST_FILE="$manifest" python3 - <<'PY'
+import json, os
+from datetime import datetime, timezone
+records = []
+if os.path.exists(os.environ["PACKAGE_RECORDS_FILE"]):
+    with open(os.environ["PACKAGE_RECORDS_FILE"], encoding="utf-8") as f:
+        for line in f:
+            architecture, archive, size, sha256 = line.rstrip("\n").split("\t")
+            records.append({"architecture": architecture, "archive": archive, "size_bytes": int(size), "sha256": sha256})
+data = {
+    "schema_version": 1,
+    "source_image": os.environ["SOURCE_IMAGE"],
+    "target_image": os.environ.get("TARGET_IMAGE", ""),
+    "digest": os.environ.get("IMAGE_DIGEST", ""),
+    "platforms": json.loads(os.environ["PLATFORM_JSON"]),
+    "published": os.environ["PUBLISH"] == "true",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+    "commit": os.environ.get("GITHUB_SHA", ""),
+    "release_tag": f"image-{os.environ.get('GITHUB_RUN_NUMBER', 'local')}",
+    "packages": records
+}
+with open(os.environ["MANIFEST_FILE"], "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
 
 if [[ "$NOTIFY_HAP" == true && -n "$WEBHOOK_URL" ]]; then
   payload="$OUTPUT_DIR/webhook-payload.json"

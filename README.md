@@ -169,9 +169,18 @@ bash scripts/push-images.sh
 每个选定架构会生成一个 Docker save 压缩包，例如：
 
 ```text
-release-assets/registry.example.com__acme__centos_7.9.2009-amd64.tar.gz
+release-assets/centos_7.9.2009_amd64.tar.gz
 release-assets/image-manifest.json
 ```
+
+包名只使用镜像最后一段的名称和 tag，不包含 registry、仓库路径或分支路径：
+
+- 单架构：`镜像名_tag.tar.gz`
+- 同一个镜像同时打包多个架构：`镜像名_tag_架构.tar.gz`
+
+例如 `registry.example.com/acme/centos:7.9.2009` 只打包 amd64 时，包名为 `centos_7.9.2009.tar.gz`；同时打包 amd64 和 arm64 时，分别为 `centos_7.9.2009_amd64.tar.gz` 和 `centos_7.9.2009_arm64.tar.gz`。
+
+`image-manifest.json` 是构建清单，记录源镜像、目标镜像、digest、平台、生成时间、仓库、提交号、Release tag，以及每个包的架构、文件名、大小和 SHA256。
 
 Workflow 会自动创建名为 `image-<run_number>` 的 GitHub Release，并上传 `release-assets/*`。
 
@@ -192,7 +201,8 @@ Workflow 会自动创建名为 `image-<run_number>` 的 GitHub Release，并上�
 
 ```text
 docker pull --platform ... IMAGE
-docker save IMAGE | gzip -9 > release-assets/*.tar.gz
+docker save IMAGE | gzip -9 > release-assets/镜像名_tag[_架构].tar.gz
+sha256sum release-assets/*.tar.gz
 创建 GitHub Release
 ```
 
