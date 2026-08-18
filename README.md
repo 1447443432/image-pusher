@@ -14,7 +14,7 @@
 
 ## 快速开始
 
-在 GitHub 项目中进入 `Actions → Image pusher → Run workflow`，按需选择操作：
+在 GitHub 项目中进入 `Actions → Image Make → Run workflow`，按需选择操作：
 
 | 操作 | 用途 |
 | --- | --- |
@@ -188,7 +188,7 @@ Workflow 会自动创建名为 `image-<run_number>` 的 GitHub Release，并上�
 | `arm64` | `registry.cn-hangzhou.aliyuncs.com/hap-mdy/linux_arm64_kafka-ui:main` |
 | `amd64` | `registry.cn-hangzhou.aliyuncs.com/hap-mdy/kafka-ui:main` |
 
-选择 `Actions → Image pusher → Run workflow`，将 `operation` 设置为 `release`，workflow 会直接对 `images.json` 中的每个镜像执行：
+选择 `Actions → Image Make → Run workflow`，将 `operation` 设置为 `release`，workflow 会直接对 `images.json` 中的每个镜像执行：
 
 ```text
 docker pull --platform ... IMAGE
@@ -202,7 +202,7 @@ docker save IMAGE | gzip -9 > release-assets/*.tar.gz
 
 ```text
 image-pusher/
-├── .github/workflows/image-pusher.yml
+├── .github/workflows/image-make.yml
 ├── images.json
 ├── images.example.json
 ├── scripts/create-release.sh

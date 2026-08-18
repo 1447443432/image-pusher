@@ -1,4 +1,5 @@
-name: Image pusher
+name: Image Make
+run-name: ${{ github.event_name == 'push' && 'Image Release (master)' || format('Image {0}', inputs.operation) }}
 
 on:
   push:
