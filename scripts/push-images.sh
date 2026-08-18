@@ -71,6 +71,7 @@ if [[ "$PACKAGE" == true ]]; then
 import re, sys
 ref = sys.argv[1].rsplit("/", 1)[-1]
 name, tag = ref.rsplit(":", 1) if ":" in ref else (ref, "latest")
+name = re.sub(r"^linux_(?:amd64|arm64)_", "", name)
 print(re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{name}_{tag}"))
 PY
 )"
@@ -108,13 +109,26 @@ data = {
     "generated_at": datetime.now(timezone.utc).isoformat(),
     "repository": os.environ.get("GITHUB_REPOSITORY", ""),
     "commit": os.environ.get("GITHUB_SHA", ""),
-    "release_tag": f"image-{os.environ.get('GITHUB_RUN_NUMBER', 'local')}",
+    "release_tag": os.environ.get("RELEASE_TAG", f"image-{os.environ.get('GITHUB_RUN_NUMBER', 'local')}"),
     "packages": records
 }
 with open(os.environ["MANIFEST_FILE"], "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
 PY
+
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  MANIFEST_FILE="$manifest" python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+import json, os
+with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
+    data = json.load(f)
+print(f"# {data['target_image'] or data['source_image']}")
+print(f"- Release tag: `{data['release_tag']}`")
+print("\n| Architecture | Archive | SHA256 |\n| --- | --- | --- |")
+for item in data["packages"]:
+    print(f"| {item['architecture']} | `{item['archive']}` | `{item['sha256']}` |")
+PY
+fi
 
 if [[ "$NOTIFY_HAP" == true && -n "$WEBHOOK_URL" ]]; then
   payload="$OUTPUT_DIR/webhook-payload.json"

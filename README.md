@@ -197,6 +197,19 @@ Workflow 会自动创建名为 `image-<run_number>` 的 GitHub Release，并上�
 | `arm64` | `registry.cn-hangzhou.aliyuncs.com/hap-mdy/linux_arm64_kafka-ui:main` |
 | `amd64` | `registry.cn-hangzhou.aliyuncs.com/hap-mdy/kafka-ui:main` |
 
+这两个镜像会按同一个逻辑镜像 `kafka-ui:main` 处理，Release 名称和 tag 为：
+
+```text
+kafka-ui_main
+```
+
+对应的架构包为：
+
+```text
+kafka-ui_main_arm64.tar.gz
+kafka-ui_main_amd64.tar.gz
+```
+
 选择 `Actions → Image Make → Run workflow`，将 `operation` 设置为 `release`，workflow 会直接对 `images.json` 中的每个镜像执行：
 
 ```text

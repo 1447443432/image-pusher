@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "release_name": "kafka-ui-images",
+  "release_name": "kafka-ui_main",
   "images": [
     {
       "image": "registry.cn-hangzhou.aliyuncs.com/hap-mdy/linux_arm64_kafka-ui:main",

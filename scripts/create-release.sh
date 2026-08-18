@@ -29,6 +29,7 @@ for item in images:
         raise SystemExit("each image needs image and architecture=amd64|arm64")
     ref = image.rsplit("/", 1)[-1]
     name, tag = ref.rsplit(":", 1) if ":" in ref else (ref, "latest")
+    name = re.sub(r"^linux_(?:amd64|arm64)_", "", name)
     keys.append((name, tag))
 counts = {key: keys.count(key) for key in set(keys)}
 for item, key in zip(images, keys):
@@ -74,7 +75,7 @@ with open(os.environ["RECORDS_FILE"], encoding="utf-8") as f:
 data = {
     "schema_version": 1,
     "release_name": config.get("release_name", "image-release"),
-    "release_tag": f"image-{os.environ.get('GITHUB_RUN_NUMBER', 'local')}",
+    "release_tag": os.environ.get("RELEASE_TAG", f"image-{os.environ.get('GITHUB_RUN_NUMBER', 'local')}"),
     "repository": os.environ.get("GITHUB_REPOSITORY", ""),
     "commit": os.environ.get("GITHUB_SHA", ""),
     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -85,6 +86,20 @@ with open(os.environ["MANIFEST_FILE"], "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
     f.write("\n")
 PY
+
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  MANIFEST_FILE="$manifest" python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+import json, os
+with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
+    data = json.load(f)
+print(f"# {data['release_name']}")
+print(f"- Release tag: `{data['release_tag']}`")
+print(f"- Architectures: `{', '.join(data['summary']['architectures'])}`")
+print("\n| Architecture | Image | Archive | SHA256 |\n| --- | --- | --- | --- |")
+for item in data["images"]:
+    print(f"| {item['architecture']} | `{item['image']}` | `{item['archive']}` | `{item['sha256']}` |")
+PY
+fi
 
 if [[ "$NOTIFY_HAP" == true && -n "$WEBHOOK_URL" ]]; then
   payload="$OUTPUT_DIR/webhook-payload.json"
