@@ -122,11 +122,22 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 import json, os
 with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
     data = json.load(f)
-print(f"# {data['target_image'] or data['source_image']}")
+print("# Push image summary")
+print()
+print(f"- Source image: `{data['source_image']}`")
+print(f"- Target image: `{data['target_image'] or '(not published)'}`")
+print(f"- Published: `{str(data['published']).lower()}`")
+print(f"- Platforms: `{', '.join(k for k, v in data['platforms'].items() if v)}`")
+if data["digest"]:
+    print(f"- Digest: `{data['digest']}`")
 print(f"- Release tag: `{data['release_tag']}`")
-print("\n| Architecture | Archive | SHA256 |\n| --- | --- | --- |")
-for item in data["packages"]:
-    print(f"| {item['architecture']} | `{item['archive']}` | `{item['sha256']}` |")
+if data["packages"]:
+    print("\n## Packages")
+    print("\n| Architecture | Archive | SHA256 |\n| --- | --- | --- |")
+    for item in data["packages"]:
+        print(f"| {item['architecture']} | `{item['archive']}` | `{item['sha256']}` |")
+else:
+    print("\nNo release packages were created.")
 PY
 fi
 
