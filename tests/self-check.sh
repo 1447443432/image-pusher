@@ -9,4 +9,6 @@ grep -q 'softprops/action-gh-release' "$root/.github/workflows/image-pusher.yml"
 grep -q 'linux_arm64_kafka-ui:main' "$root/images.json"
 grep -q 'docker save' "$root/scripts/create-release.sh"
 grep -q "operation == 'push-and-release'" "$root/.github/workflows/image-pusher.yml"
+grep -q 'branches:' "$root/.github/workflows/image-pusher.yml"
+grep -q "github.event_name == 'push'" "$root/.github/workflows/image-pusher.yml"
 echo 'self-check passed'

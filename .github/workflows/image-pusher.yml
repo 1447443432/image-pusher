@@ -1,6 +1,9 @@
 name: Image pusher
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       operation:
@@ -54,14 +57,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Login to image registry
-        if: ${{ inputs.publish && vars.REGISTRY != '' }}
+        if: ${{ (inputs.publish || github.event_name == 'push') && vars.REGISTRY != '' }}
         uses: docker/login-action@v3
         with:
           registry: ${{ vars.REGISTRY }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
       - name: Push image
-        if: ${{ inputs.operation == 'push' || inputs.operation == 'push-and-release' }}
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
         env:
           SOURCE_IMAGE: ${{ inputs.image }}
           TARGET_IMAGE: ${{ inputs.target_image }}
@@ -74,16 +77,16 @@ jobs:
           HAP_WEBHOOK_SIGN: ${{ secrets.HAP_WEBHOOK_SIGN }}
         run: bash scripts/push-images.sh
       - name: Create release-only archives
-        if: ${{ inputs.operation == 'release' }}
+        if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
         env:
-          CONFIG_FILE: ${{ inputs.manifest_file }}
-          NOTIFY_HAP: ${{ inputs.notify_hap }}
+          CONFIG_FILE: ${{ inputs.manifest_file || 'images.json' }}
+          NOTIFY_HAP: ${{ inputs.notify_hap || 'false' }}
           HAP_WEBHOOK_URL: ${{ secrets.HAP_WEBHOOK_URL }}
           HAP_WEBHOOK_APP_KEY: ${{ secrets.HAP_WEBHOOK_APP_KEY }}
           HAP_WEBHOOK_SIGN: ${{ secrets.HAP_WEBHOOK_SIGN }}
         run: bash scripts/create-release.sh
       - name: Create GitHub release
-        if: ${{ inputs.operation == 'release' || inputs.operation == 'push-and-release' || inputs.package }}
+        if: ${{ inputs.operation == 'release' || inputs.operation == 'push-and-release' || inputs.package || github.event_name == 'push' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: image-${{ github.run_number }}

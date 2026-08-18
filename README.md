@@ -6,6 +6,7 @@
 - 目标仓库推送，例如阿里云容器镜像服务
 - `amd64`、`arm64` 或多架构 manifest
 - GitHub Actions 手动触发
+- `master` 分支推送自动触发 Release
 - 可选生成各架构 Docker `.tar.gz` 镜像包
 - 可选创建 GitHub Release
 - 可选通知明道云 HAP Webhook
@@ -33,6 +34,8 @@ workflow 参数：
 | `package` | `false` | 是否生成 Docker 镜像归档并创建 Release |
 | `notify_hap` | `false` | 是否发送 HAP Webhook |
 | `manifest_file` | `images.json` | `release` 模式使用的已有镜像清单 |
+
+向 `master` 分支推送代码时，workflow 会自动使用 `release` 模式，读取默认的 `images.json`，为清单中的已有镜像创建 Release。自动触发没有表单输入，不会执行源镜像复制，也不会自动发送 HAP 通知；需要手动推送镜像时，请使用 `Run workflow`。
 
 模式参数的关系：
 
