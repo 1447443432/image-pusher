@@ -223,33 +223,36 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: |
-          {
-            echo "# Release ${RELEASE_TAG}"
-            echo
-            echo "- Repository: `${GITHUB_REPOSITORY}`"
-            echo "- Tag: [${RELEASE_TAG}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG})"
-            echo "- Assets: `release-assets/*`"
-            echo
-            echo '| Architecture | Image | Archive | SHA256 |'
-            echo '| --- | --- | --- | --- |'
-            python3 - <<'PY'
-          import json
+          echo "# Release ${RELEASE_TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "- Repository: \`${GITHUB_REPOSITORY}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tag: [${RELEASE_TAG}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG})" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '| Architecture | Image | Archive | SHA256 |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| --- | --- | --- | --- |' >> "$GITHUB_STEP_SUMMARY"
+          GITHUB_SERVER_URL="$GITHUB_SERVER_URL" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" RELEASE_TAG="$RELEASE_TAG" python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
           data = json.load(open("release-assets/release-manifest.json", encoding="utf-8"))
+          base = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['RELEASE_TAG']}"
           for item in data["images"]:
-              print(f"| {item['architecture']} | `{item['image']}` | `{item['archive']}` | `{item['sha256']}` |")
+              archive = item["archive"]
+              print(f"| {item['architecture']} | `{item['image']}` | [{archive}]({base}/{archive}) | `{item['sha256']}` |")
           PY
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Sync Release to HAP
         env:
-          NOTIFY_HAP: ${{ inputs.notify_hap || 'false' }}
+          NOTIFY_HAP: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_hap || 'false' }}
         run: |
+          echo '# HAP sync' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
           if [[ "$NOTIFY_HAP" != true || -z "$HAP_WEBHOOK_URL" ]]; then
-            echo 'HAP Webhook: skipped' >> "$GITHUB_STEP_SUMMARY"
+            echo 'HAP sync: skipped' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo 'HAP_WEBHOOK_URL is not configured or notify_hap is disabled.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          curl --fail-with-body --retry 2 -sS -X POST "$HAP_WEBHOOK_URL" \
-            -H 'Content-Type: application/json' \
-            ${HAP_WEBHOOK_APP_KEY:+-H "AppKey: $HAP_WEBHOOK_APP_KEY"} \
-            ${HAP_WEBHOOK_SIGN:+-H "Sign: $HAP_WEBHOOK_SIGN"} \
+          headers=(-H 'Content-Type: application/json')
+          [[ -z "$HAP_WEBHOOK_APP_KEY" ]] || headers+=(-H "AppKey: $HAP_WEBHOOK_APP_KEY")
+          [[ -z "$HAP_WEBHOOK_SIGN" ]] || headers+=(-H "Sign: $HAP_WEBHOOK_SIGN")
+          curl --fail-with-body --retry 2 -sS -X POST "$HAP_WEBHOOK_URL" "${headers[@]}" \
             --data-binary @release-assets/release-manifest.json
-          echo 'HAP Webhook: notified successfully' >> "$GITHUB_STEP_SUMMARY"
+          echo 'HAP sync: notified successfully' >> "$GITHUB_STEP_SUMMARY"
