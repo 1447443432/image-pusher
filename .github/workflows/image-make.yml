@@ -244,10 +244,16 @@ jobs:
         run: |
           echo '# HAP sync' >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$NOTIFY_HAP" != true || -z "$HAP_WEBHOOK_URL" ]]; then
+          if [[ "$NOTIFY_HAP" != true ]]; then
             echo 'HAP sync: skipped' >> "$GITHUB_STEP_SUMMARY"
             echo >> "$GITHUB_STEP_SUMMARY"
-            echo 'HAP_WEBHOOK_URL is not configured or notify_hap is disabled.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'notify_hap is disabled.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ -z "$HAP_WEBHOOK_URL" ]]; then
+            echo 'HAP sync: skipped' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo 'HAP_WEBHOOK_URL is not configured.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           headers=(-H 'Content-Type: application/json')
