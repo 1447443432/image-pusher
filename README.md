@@ -36,6 +36,57 @@ workflow 参数：
 | `notify_hap` | `false` | 是否发送 HAP Webhook |
 | `manifest_file` | `images.json` | `release` 模式使用的已有镜像清单 |
 
+### Run workflow 页面怎么填写
+
+进入 `Actions → Image Make → Run workflow` 后，先选择 `master` 分支，再根据实际目的选择操作。
+
+#### 只推送镜像：`push`
+
+例如把 Docker Hub 的 CentOS 镜像复制到阿里云：
+
+| 页面字段 | 填写值 |
+| --- | --- |
+| Select the operation | `push` |
+| Source image for push mode | `centos:7.9.2009` |
+| Target image for push mode | `registry.cn-hangzhou.aliyuncs.com/你的命名空间/centos:7.9.2009` |
+| Architectures for push mode | `amd64`，或 `amd64,arm64` |
+| Push the image to the target registry | 勾选 |
+| Create Docker archives in push mode | 不勾选 |
+| Notify HAP Webhook after completion | 按需勾选 |
+| Existing image manifest for release mode | 保持 `images.json`，本模式不使用 |
+
+此模式只复制镜像，不生成 Release 压缩包。
+
+#### 只创建镜像 Release：`release`
+
+适用于镜像已经存在于目标仓库，只需要下载并打包：
+
+| 页面字段 | 填写值 |
+| --- | --- |
+| Select the operation | `release` |
+| Source image for push mode | 留空 |
+| Target image for push mode | 留空 |
+| Architectures for push mode | 保持默认值，本模式不使用 |
+| Push the image to the target registry | 不勾选 |
+| Create Docker archives in push mode | 不勾选，本模式自动打包 |
+| Notify HAP Webhook after completion | 按需勾选 |
+| Existing image manifest for release mode | `images.json` |
+
+`images.json` 中的每个镜像都会被按架构打包，并创建一个以 `release_name` 命名的 Release。
+
+#### 推送后立即创建 Release：`push-and-release`
+
+填写方式与 `push` 相同，但选择：
+
+```text
+Select the operation: push-and-release
+Push the image to the target registry: 勾选
+```
+
+该模式会先复制镜像，再从目标镜像生成各架构 `.tar.gz`，最后创建 Release；即使不勾选 `Create Docker archives in push mode`，也会自动打包。
+
+说明：`release` 模式不读取 Source image、Target image 和 Architectures 字段；`push` 模式不读取 `images.json`。未启用的步骤会在 Actions 页面显示对应的 skipped summary。
+
 向 `master` 分支推送代码时，workflow 会自动使用 `release` 模式，读取默认的 `images.json`，为清单中的已有镜像创建 Release。自动触发没有表单输入，不会执行源镜像复制，也不会自动发送 HAP 通知；需要手动推送镜像时，请使用 `Run workflow`。
 
 Release 构建流程与 builder 项目一致，按阶段执行：
