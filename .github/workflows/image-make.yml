@@ -161,7 +161,7 @@ jobs:
         run: bash scripts/create-release.sh
       - uses: actions/upload-artifact@v6
         with:
-          name: image-release-${{ matrix.architecture }}
+          name: ${{ needs.resolve.outputs.release_tag }}_${{ matrix.architecture }}
           path: release-assets/*
           if-no-files-found: error
 
@@ -176,7 +176,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
-          pattern: image-release-*
+          pattern: ${{ needs.resolve.outputs.release_tag }}_*
           path: release-assets
           merge-multiple: true
       - name: Build release manifest
@@ -209,7 +209,7 @@ jobs:
       - name: Upload final release artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: release-${{ needs.resolve.outputs.release_tag }}
+          name: ${{ needs.resolve.outputs.release_tag }}
           path: release-assets/*
           if-no-files-found: error
       - name: Create Release
