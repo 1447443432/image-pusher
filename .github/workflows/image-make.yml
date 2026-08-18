@@ -1,5 +1,5 @@
 name: Image Make
-run-name: ${{ github.event_name == 'push' && 'Image Release (master)' || format('Image {0}', inputs.operation) }}
+run-name: ${{ github.event_name == 'push' && 'Image Release (master)' || format('Image Make - {0}', inputs.operation) }}
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
           - release
           - push-and-release
       image:
-        description: Source image for push mode, for example centos:7.9.2009
+        description: Source image for push mode
         required: false
         type: string
       target_image:
@@ -50,19 +50,25 @@ on:
         default: images.json
         type: string
 
+env:
+  REGISTRY: ${{ vars.REGISTRY }}
+  REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+  HAP_WEBHOOK_URL: ${{ secrets.HAP_WEBHOOK_URL }}
+  HAP_WEBHOOK_APP_KEY: ${{ secrets.HAP_WEBHOOK_APP_KEY }}
+  HAP_WEBHOOK_SIGN: ${{ secrets.HAP_WEBHOOK_SIGN }}
+
 jobs:
-  image-make:
-    name: Image Make
+  resolve:
+    name: Resolve release configuration
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.value }}
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve release configuration
-        id: release_name
+      - id: resolve
         env:
           OPERATION: ${{ inputs.operation }}
-          SOURCE_IMAGE: ${{ inputs.image }}
           TARGET_IMAGE: ${{ inputs.target_image }}
           MANIFEST_FILE: ${{ inputs.manifest_file || 'images.json' }}
           EVENT_NAME: ${{ github.event_name }}
@@ -82,18 +88,29 @@ jobs:
           import re, sys
           ref = sys.argv[1].rsplit("/", 1)[-1]
           name, tag = ref.rsplit(":", 1) if ":" in ref else (ref, "latest")
+          name = re.sub(r"^linux_(?:amd64|arm64)_", "", name)
           print(f"value={re.sub(r'[^A-Za-z0-9_.-]+', '_', f'{name}_{tag}')}")
           PY
           fi
+
+  push:
+    name: Push image
+    if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - name: Login to image registry
-        if: ${{ (inputs.publish || github.event_name == 'push') && vars.REGISTRY != '' }}
+        if: ${{ inputs.publish && env.REGISTRY != '' }}
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-      - name: Push image
-        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+      - name: Push image and create packages
         env:
           SOURCE_IMAGE: ${{ inputs.image }}
           TARGET_IMAGE: ${{ inputs.target_image }}
@@ -101,26 +118,107 @@ jobs:
           PUBLISH: ${{ inputs.publish }}
           PACKAGE: ${{ inputs.operation == 'push-and-release' || inputs.package }}
           NOTIFY_HAP: ${{ inputs.notify_hap }}
-          HAP_WEBHOOK_URL: ${{ secrets.HAP_WEBHOOK_URL }}
-          HAP_WEBHOOK_APP_KEY: ${{ secrets.HAP_WEBHOOK_APP_KEY }}
-          HAP_WEBHOOK_SIGN: ${{ secrets.HAP_WEBHOOK_SIGN }}
-          RELEASE_TAG: ${{ steps.release_name.outputs.value }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: bash scripts/push-images.sh
-      - name: Create release-only archives
-        if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
-        env:
-          CONFIG_FILE: ${{ inputs.manifest_file || 'images.json' }}
-          NOTIFY_HAP: ${{ inputs.notify_hap || 'false' }}
-          HAP_WEBHOOK_URL: ${{ secrets.HAP_WEBHOOK_URL }}
-          HAP_WEBHOOK_APP_KEY: ${{ secrets.HAP_WEBHOOK_APP_KEY }}
-          HAP_WEBHOOK_SIGN: ${{ secrets.HAP_WEBHOOK_SIGN }}
-          RELEASE_TAG: ${{ steps.release_name.outputs.value }}
-        run: bash scripts/create-release.sh
-      - name: Create GitHub release
-        if: ${{ inputs.operation == 'release' || inputs.operation == 'push-and-release' || inputs.package || github.event_name == 'push' }}
+      - name: Create Release
+        if: ${{ inputs.operation == 'push-and-release' || inputs.package }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_name.outputs.value }}
-          name: ${{ steps.release_name.outputs.value }}
+          tag_name: ${{ needs.resolve.outputs.release_tag }}
+          name: ${{ needs.resolve.outputs.release_tag }}
           generate_release_notes: true
           files: release-assets/*
+
+  package:
+    name: Build ${{ matrix.architecture }}
+    if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to image registry
+        if: ${{ env.REGISTRY != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+      - name: Package ${{ matrix.architecture }} image
+        env:
+          CONFIG_FILE: ${{ inputs.manifest_file || 'images.json' }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          MANIFEST_FILE: release-assets/release-manifest-${{ matrix.architecture }}.json
+          NOTIFY_HAP: false
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: bash scripts/create-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-release-${{ matrix.architecture }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
+    needs: [resolve, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Build release manifest
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          from datetime import datetime, timezone
+          paths = glob.glob("release-assets/release-manifest-*.json")
+          if not paths:
+              raise SystemExit("no architecture manifests found")
+          manifests = [json.load(open(path, encoding="utf-8")) for path in paths]
+          images = [item for manifest in manifests for item in manifest["images"]]
+          result = {
+              "schema_version": 1,
+              "release_name": manifests[0]["release_name"],
+              "release_tag": os.environ["RELEASE_TAG"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit": os.environ["GITHUB_SHA"],
+              "generated_at": datetime.now(timezone.utc).isoformat(),
+              "images": images,
+              "summary": {"count": len(images), "architectures": sorted({item["architecture"] for item in images})}
+          }
+          json.dump(result, open("release-assets/release-manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+          open("release-assets/release-manifest.json", "a", encoding="utf-8").write("\n")
+          PY
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.release_tag }}
+          name: ${{ needs.resolve.outputs.release_tag }}
+          generate_release_notes: true
+          files: release-assets/*
+      - name: Sync Release to HAP
+        env:
+          NOTIFY_HAP: ${{ inputs.notify_hap || 'false' }}
+        run: |
+          if [[ "$NOTIFY_HAP" != true || -z "$HAP_WEBHOOK_URL" ]]; then exit 0; fi
+          curl --fail-with-body --retry 2 -sS -X POST "$HAP_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            ${HAP_WEBHOOK_APP_KEY:+-H "AppKey: $HAP_WEBHOOK_APP_KEY"} \
+            ${HAP_WEBHOOK_SIGN:+-H "Sign: $HAP_WEBHOOK_SIGN"} \
+            --data-binary @release-assets/release-manifest.json

@@ -5,6 +5,8 @@ CONFIG_FILE="${CONFIG_FILE:-images.json}"
 OUTPUT_DIR="${OUTPUT_DIR:-release-assets}"
 NOTIFY_HAP="${NOTIFY_HAP:-false}"
 WEBHOOK_URL="${HAP_WEBHOOK_URL:-}"
+ARCHITECTURE="${ARCHITECTURE:-}"
+MANIFEST_FILE="${MANIFEST_FILE:-$OUTPUT_DIR/release-manifest.json}"
 
 die() { printf '[image-release] ERROR: %s\n' "$*" >&2; exit 1; }
 log() { printf '[image-release] %s\n' "$*"; }
@@ -14,8 +16,8 @@ command -v sha256sum >/dev/null || die 'sha256sum is required'
 [[ "$NOTIFY_HAP" == true || "$NOTIFY_HAP" == false ]] || die 'NOTIFY_HAP must be true or false'
 
 mkdir -p "$OUTPUT_DIR"
-mapfile -t entries < <(python3 - "$CONFIG_FILE" <<'PY'
-import json, re, sys
+mapfile -t entries < <(ARCHITECTURE="$ARCHITECTURE" python3 - "$CONFIG_FILE" <<'PY'
+import json, os, re, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)
 images = data.get("images")
@@ -35,6 +37,8 @@ counts = {key: keys.count(key) for key in set(keys)}
 for item, key in zip(images, keys):
     image = item["image"]
     architecture = item["architecture"]
+    if os.environ.get("ARCHITECTURE") and architecture != os.environ["ARCHITECTURE"]:
+        continue
     platform = item.get("platform", f"linux/{architecture}")
     name, tag = key
     base = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{name}_{tag}")
@@ -42,6 +46,7 @@ for item, key in zip(images, keys):
     print(f"{image}\t{architecture}\t{platform}\t{base}\t{needs_architecture}")
 PY
 )
+[[ "${#entries[@]}" -gt 0 ]] || die "no image matches ARCHITECTURE=$ARCHITECTURE"
 
 records_file="$(mktemp)"
 trap 'rm -f "$records_file"' EXIT
@@ -61,8 +66,7 @@ for entry in "${entries[@]}"; do
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$image" "$architecture" "$platform" "$archive_name" "$digest" "$size" "$sha256" >> "$records_file"
 done
 
-manifest="$OUTPUT_DIR/release-manifest.json"
-CONFIG_FILE="$CONFIG_FILE" RECORDS_FILE="$records_file" MANIFEST_FILE="$manifest" python3 - <<'PY'
+CONFIG_FILE="$CONFIG_FILE" RECORDS_FILE="$records_file" MANIFEST_FILE="$MANIFEST_FILE" python3 - <<'PY'
 import json, os
 from datetime import datetime, timezone
 with open(os.environ["CONFIG_FILE"], encoding="utf-8") as f:
@@ -88,7 +92,7 @@ with open(os.environ["MANIFEST_FILE"], "w", encoding="utf-8") as f:
 PY
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  MANIFEST_FILE="$manifest" python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+  MANIFEST_FILE="$MANIFEST_FILE" python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
 import json, os
 with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
     data = json.load(f)
@@ -103,7 +107,7 @@ fi
 
 if [[ "$NOTIFY_HAP" == true && -n "$WEBHOOK_URL" ]]; then
   payload="$OUTPUT_DIR/webhook-payload.json"
-  MANIFEST_FILE="$manifest" python3 - "$payload" <<'PY'
+  MANIFEST_FILE="$MANIFEST_FILE" python3 - "$payload" <<'PY'
 import json, os, sys
 with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
     manifest = json.load(f)
