@@ -96,22 +96,26 @@ jobs:
 
   push:
     name: Push image
-    if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
     needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-buildx-action@v4
+      - name: Checkout
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
+        uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
+        uses: docker/setup-buildx-action@v4
       - name: Login to image registry
-        if: ${{ inputs.publish && env.REGISTRY != '' }}
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') && inputs.publish && env.REGISTRY != '' }}
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ env.REGISTRY_USERNAME }}
           password: ${{ env.REGISTRY_PASSWORD }}
       - name: Push image and create packages
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
         env:
           SOURCE_IMAGE: ${{ inputs.image }}
           TARGET_IMAGE: ${{ inputs.target_image }}
@@ -122,13 +126,26 @@ jobs:
           RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
         run: bash scripts/push-images.sh
       - name: Create Release
-        if: ${{ inputs.operation == 'push-and-release' || inputs.package }}
+        if: ${{ github.event_name != 'push' && (inputs.operation == 'push-and-release' || inputs.package) }}
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.resolve.outputs.release_tag }}
           name: ${{ needs.resolve.outputs.release_tag }}
           generate_release_notes: true
           files: release-assets/*
+      - name: Push image summary
+        env:
+          PUSH_ENABLED: ${{ github.event_name != 'push' && (inputs.operation == 'push' || inputs.operation == 'push-and-release') }}
+        run: |
+          echo '# Push image' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$PUSH_ENABLED" != true ]]; then
+            echo 'Push image: skipped' >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo 'Push image is only enabled for workflow_dispatch with operation push or push-and-release.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Push image: completed' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   package:
     name: Build ${{ matrix.architecture }}
