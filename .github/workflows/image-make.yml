@@ -223,12 +223,6 @@ jobs:
           json.dump(result, open("release-assets/release-manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
           open("release-assets/release-manifest.json", "a", encoding="utf-8").write("\n")
           PY
-      - name: Upload final release artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ needs.resolve.outputs.release_tag }}
-          path: release-assets/*
-          if-no-files-found: error
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
