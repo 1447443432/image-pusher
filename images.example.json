@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "description": "image-pusher 镜像清单示例",
+  "defaults": {
+    "platforms": {
+      "amd64": true,
+      "arm64": false
+    },
+    "publish": true,
+    "package": false,
+    "notify_hap": false
+  },
+  "images": [
+    {
+      "image": "centos:7.9.2009",
+      "target": "registry.cn-hangzhou.aliyuncs.com/your-namespace/centos:7.9.2009",
+      "platforms": {
+        "amd64": true,
+        "arm64": false
+      },
+      "publish": true,
+      "package": false,
+      "notify_hap": true,
+      "source_auth": false
+    },
+    {
+      "image": "nginx:1.27",
+      "target": "registry.cn-hangzhou.aliyuncs.com/your-namespace/nginx:1.27",
+      "platforms": {
+        "amd64": true,
+        "arm64": true
+      },
+      "publish": true,
+      "package": true,
+      "notify_hap": false,
+      "source_auth": false
+    }
+  ]
+}

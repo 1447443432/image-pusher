@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "release_name": "kafka-ui-images",
+  "images": [
+    {
+      "image": "registry.cn-hangzhou.aliyuncs.com/hap-mdy/linux_arm64_kafka-ui:main",
+      "architecture": "arm64",
+      "platform": "linux/arm64"
+    },
+    {
+      "image": "registry.cn-hangzhou.aliyuncs.com/hap-mdy/kafka-ui:main",
+      "architecture": "amd64",
+      "platform": "linux/amd64"
+    }
+  ]
+}
