@@ -50,6 +50,10 @@ on:
         default: images.json
         type: string
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.operation || 'release' }}-${{ inputs.image || inputs.manifest_file || 'images.json' }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ${{ vars.REGISTRY }}
   REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
@@ -62,6 +66,7 @@ jobs:
   resolve:
     name: Resolve release configuration
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       release_tag: ${{ steps.resolve.outputs.value }}
       architectures: ${{ steps.resolve.outputs.architectures }}
@@ -162,6 +167,7 @@ jobs:
     name: Push image
     needs: resolve
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -217,6 +223,7 @@ jobs:
     if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
     needs: resolve
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -269,6 +276,7 @@ jobs:
     if: ${{ inputs.operation == 'release' || github.event_name == 'push' }}
     needs: [resolve, package]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -353,6 +361,6 @@ jobs:
           headers=(-H 'Content-Type: application/json')
           [[ -z "$HAP_WEBHOOK_APP_KEY" ]] || headers+=(-H "AppKey: $HAP_WEBHOOK_APP_KEY")
           [[ -z "$HAP_WEBHOOK_SIGN" ]] || headers+=(-H "Sign: $HAP_WEBHOOK_SIGN")
-          curl --fail-with-body --retry 2 -sS -X POST "$HAP_WEBHOOK_URL" "${headers[@]}" \
+          curl --fail-with-body --retry 2 --connect-timeout 10 --max-time 60 -sS -X POST "$HAP_WEBHOOK_URL" "${headers[@]}" \
             --data-binary @release-assets/release-manifest.json
           echo 'HAP sync: notified successfully' >> "$GITHUB_STEP_SUMMARY"

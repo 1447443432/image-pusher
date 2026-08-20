@@ -106,6 +106,8 @@ Push the image to the target registry: 勾选
 
 说明：`release` 模式填写镜像时使用 Source image 和 Architectures 字段，不使用 Target image；留空镜像时使用 `images.json`。`push` 模式不读取 `images.json`。未启用的步骤会在 Actions 页面显示对应的 skipped summary。
 
+Workflow 会在构建前校验镜像、架构、目标仓库和清单参数；拉取后还会校验本地镜像的实际架构，避免把错误架构打包。相同分支和镜像的并发运行会排队，重复创建同一个 Release 时会覆盖同名资产。HAP Webhook 请求带有 10 秒连接超时、60 秒总超时和自动重试。
+
 向 `master` 分支推送代码时，workflow 会自动使用 `release` 模式，读取默认的 `images.json`，为清单中的已有镜像创建 Release。自动触发没有表单输入，不会执行源镜像复制，也不会自动发送 HAP 通知；需要手动推送镜像时，请使用 `Run workflow`。
 
 Release 构建流程与 builder 项目一致，按阶段执行：

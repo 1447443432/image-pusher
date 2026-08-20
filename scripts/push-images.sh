@@ -83,6 +83,8 @@ PY
     archive="$OUTPUT_DIR/$archive_name"
     log "packaging $TARGET_IMAGE ($platform) -> $archive"
     docker pull --platform "$platform" "$TARGET_IMAGE" >/dev/null
+    actual_architecture="$(docker image inspect "$TARGET_IMAGE" --format '{{.Architecture}}' 2>/dev/null || true)"
+    [[ "$actual_architecture" == "$arch" ]] || die "$TARGET_IMAGE resolved to $actual_architecture, expected $arch"
     docker save "$TARGET_IMAGE" | gzip -9 > "$archive"
     sha256="$(sha256sum "$archive" | awk '{print $1}')"
     size="$(wc -c < "$archive" | tr -d ' ')"
@@ -154,6 +156,6 @@ PY
   headers=(-H 'Content-Type: application/json')
   [[ -z "${HAP_WEBHOOK_APP_KEY:-}" ]] || headers+=(-H "AppKey: $HAP_WEBHOOK_APP_KEY")
   [[ -z "${HAP_WEBHOOK_SIGN:-}" ]] || headers+=(-H "Sign: $HAP_WEBHOOK_SIGN")
-  curl --fail-with-body --retry 2 -sS -X POST "$WEBHOOK_URL" "${headers[@]}" --data-binary "@$payload" >/dev/null
+  curl --fail-with-body --retry 2 --connect-timeout 10 --max-time 60 -sS -X POST "$WEBHOOK_URL" "${headers[@]}" --data-binary "@$payload" >/dev/null
 fi
 log "done; manifest: $manifest"

@@ -58,6 +58,8 @@ for entry in "${entries[@]}"; do
   archive="$OUTPUT_DIR/$archive_name"
   log "pulling $image ($platform)"
   docker pull --platform "$platform" "$image" >/dev/null
+  actual_architecture="$(docker image inspect "$image" --format '{{.Architecture}}' 2>/dev/null || true)"
+  [[ "$actual_architecture" == "$architecture" ]] || die "$image resolved to $actual_architecture, expected $architecture"
   log "saving $image -> $archive"
   docker save "$image" | gzip -9 > "$archive"
   digest="$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
