@@ -17,7 +17,7 @@ on:
           - release
           - push-and-release
       image:
-        description: push 模式的源镜像，例如 centos:7.9.2009；release 模式留空
+        description: push 模式源镜像，或 release 模式要打包的已有镜像
         required: false
         type: string
       target_image:
@@ -25,7 +25,7 @@ on:
         required: false
         type: string
       platforms:
-        description: push 模式的架构，填写 amd64、arm64 或 amd64,arm64
+        description: 架构，填写 amd64、arm64 或 amd64,arm64；release 直填镜像时也生效
         required: true
         default: amd64,arm64
         type: string
@@ -64,17 +64,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.resolve.outputs.value }}
+      architectures: ${{ steps.resolve.outputs.architectures }}
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
       - id: resolve
         env:
           OPERATION: ${{ inputs.operation }}
+          IMAGE: ${{ inputs.image }}
           TARGET_IMAGE: ${{ inputs.target_image }}
+          PLATFORMS: ${{ inputs.platforms }}
           MANIFEST_FILE: ${{ inputs.manifest_file || 'images.json' }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [[ "$EVENT_NAME" == push || "$OPERATION" == release ]]; then
+          if [[ "$EVENT_NAME" == push || ("$OPERATION" == release && -z "$IMAGE") ]]; then
             python3 - "$MANIFEST_FILE" >> "$GITHUB_OUTPUT" <<'PY'
           import json, sys
           with open(sys.argv[1], encoding="utf-8") as f:
@@ -83,14 +86,17 @@ jobs:
           if not value:
               raise SystemExit("manifest release_name is required")
           print(f"value={value}")
+          print(f"architectures={json.dumps(sorted({item['architecture'] for item in data['images']}), separators=(',', ':'))}")
           PY
           else
-            python3 - "$TARGET_IMAGE" >> "$GITHUB_OUTPUT" <<'PY'
-          import re, sys
-          ref = sys.argv[1].rsplit("/", 1)[-1]
+            python3 - "$IMAGE" "$TARGET_IMAGE" "$PLATFORMS" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, re, sys
+          ref = (sys.argv[1] or sys.argv[2]).rsplit("/", 1)[-1]
           name, tag = ref.rsplit(":", 1) if ":" in ref else (ref, "latest")
           name = re.sub(r"^linux_(?:amd64|arm64)_", "", name)
           print(f"value={re.sub(r'[^A-Za-z0-9_.-]+', '_', f'{name}_{tag}')}")
+          architectures = [item for item in re.split(r"[, ]+", sys.argv[3]) if item in {"amd64", "arm64"}]
+          print(f"architectures={json.dumps(architectures or ['amd64', 'arm64'], separators=(',', ':'))}")
           PY
           fi
 
@@ -155,12 +161,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture: [amd64, arm64]
+        architecture: ${{ fromJSON(needs.resolve.outputs.architectures) }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
+      - name: Prepare direct release manifest
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release' && inputs.image != '' }}
+        env:
+          IMAGE: ${{ inputs.image }}
+          PLATFORMS: ${{ inputs.platforms }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          architectures = [item for item in os.environ["PLATFORMS"].replace("linux/", "").replace(" ", "").split(",") if item in {"amd64", "arm64"}]
+          if not architectures:
+              raise SystemExit("platforms must contain amd64 or arm64")
+          images = [{"image": os.environ["IMAGE"], "architecture": architecture, "platform": f"linux/{architecture}"} for architecture in architectures]
+          with open("release-config.json", "w", encoding="utf-8") as f:
+              json.dump({"version": 1, "release_name": os.environ["RELEASE_TAG"], "images": images}, f, indent=2)
+              f.write("\n")
+          PY
       - name: Login to image registry
         if: ${{ env.REGISTRY != '' }}
         uses: docker/login-action@v4
@@ -170,7 +193,7 @@ jobs:
           password: ${{ env.REGISTRY_PASSWORD }}
       - name: Package ${{ matrix.architecture }} image
         env:
-          CONFIG_FILE: ${{ inputs.manifest_file || 'images.json' }}
+          CONFIG_FILE: ${{ (inputs.operation == 'release' && inputs.image != '') && 'release-config.json' || inputs.manifest_file || 'images.json' }}
           ARCHITECTURE: ${{ matrix.architecture }}
           MANIFEST_FILE: release-assets/release-manifest-${{ matrix.architecture }}.json
           NOTIFY_HAP: false

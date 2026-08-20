@@ -61,7 +61,24 @@ workflow 参数：
 
 #### 只创建镜像 Release：`release`
 
-适用于镜像已经存在于目标仓库，只需要下载并打包：
+适用于镜像已经存在于目标仓库，只需要下载并打包。现在有两种填写方式：
+
+方式一：直接在表单填写一个镜像（适合临时打包）：
+
+| 页面字段 | 填写值 |
+| --- | --- |
+| Select the operation | `release` |
+| Source image for push mode | `registry.cn-hangzhou.aliyuncs.com/hap-mdy/linux-tools-amd64:1.0-alpine` |
+| Architectures for push mode | `amd64` |
+| Existing image manifest for release mode | 保持 `images.json` 即可，填写了镜像时不读取该文件 |
+
+此时 workflow 会直接拉取上述镜像，生成类似下面的归档：
+
+```text
+linux-tools-amd64_1.0-alpine.tar.gz
+```
+
+方式二：批量处理清单：
 
 | 页面字段 | 填写值 |
 | --- | --- |
@@ -74,7 +91,7 @@ workflow 参数：
 | Notify HAP Webhook after completion | 按需勾选 |
 | Existing image manifest for release mode | `images.json` |
 
-`images.json` 中的每个镜像都会被按架构打包，并创建一个以 `release_name` 命名的 Release。
+`images.json` 中的每个镜像都会被按架构打包，并创建一个以 `release_name` 命名的 Release。直接填写镜像时，Release 名称根据镜像最后的名称和 tag 自动生成。
 
 #### 推送后立即创建 Release：`push-and-release`
 
@@ -110,7 +127,7 @@ Resolve release configuration
 模式参数的关系：
 
 - `push`：使用 `image`、`target_image`、`platforms`；`package=true` 时会把推送后的 `target_image` 打包。
-- `release`：使用 `manifest_file`；直接打包清单中的已有镜像，`image`、`target_image`、`platforms` 和 `package` 不参与选择。
+- `release`：如果填写了 `image`，直接打包该镜像，并使用 `platforms` 选择架构；如果 `image` 留空，则读取 `manifest_file` 中的清单。
 - `push-and-release`：使用 `image`、`target_image`、`platforms`，并强制生成 Release 包；此时即使 `package=false` 也会打包。
 
 第一次测试建议使用：
@@ -192,7 +209,7 @@ HAP_WEBHOOK_SIGN=你的Sign
 - `notify_hap`：当前镜像是否通知 HAP
 - `source_auth`：源仓库认证开关，当前版本保留字段，尚未实现源仓库登录
 
-重要：当前 workflow 不会自动读取 `images.example.json`，它只是配置格式样例。`release` 模式会读取 `manifest_file` 指定的清单，默认是 `images.json`，并逐个处理其中的 `images` 条目；`push` 模式仍然一次处理 workflow 输入中的一个镜像。
+重要：当前 workflow 不会自动读取 `images.example.json`，它只是配置格式样例。`release` 模式填写 `image` 时直接处理该镜像；`image` 留空时才读取 `manifest_file` 指定的清单，默认是 `images.json`，并逐个处理其中的 `images` 条目；`push` 模式仍然一次处理 workflow 输入中的一个镜像。
 
 ## 本地运行
 
