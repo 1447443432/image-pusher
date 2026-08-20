@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: 操作模式：push 推送、release 打包、push-and-release 推送并打包
+        description: 选择操作：推送、创建 Release、推送并创建 Release
         required: true
         default: push
         type: choice
@@ -17,35 +17,35 @@ on:
           - release
           - push-and-release
       image:
-        description: push 模式源镜像，或 release 模式要打包的已有镜像
+        description: 镜像地址：push 填源镜像，release 填要打包的镜像
         required: false
         type: string
       target_image:
-        description: push 模式的目标镜像，publish=true 时必填
+        description: 目标镜像地址：仅 push 和 push-and-release 需要填写
         required: false
         type: string
       platforms:
-        description: 架构，填写 amd64、arm64 或 amd64,arm64；release 直填镜像时也生效
+        description: 架构：amd64、arm64 或 amd64,arm64
         required: true
         default: amd64,arm64
         type: string
       publish:
-        description: 是否将源镜像复制并推送到目标仓库；不推送时取消勾选
+        description: 是否推送到目标仓库
         required: true
         default: true
         type: boolean
       package:
-        description: push 模式是否生成 Docker tar.gz 归档并创建 Release
+        description: push 模式是否生成归档；release 模式自动打包
         required: true
         default: false
         type: boolean
       notify_hap:
-        description: 是否在完成后通知 HAP Webhook；还需要配置仓库 Secret
+        description: 是否完成后通知 HAP Webhook
         required: true
         default: false
         type: boolean
       manifest_file:
-        description: release 模式读取的镜像清单文件，默认 images.json
+        description: release 未填写镜像时使用的清单，默认 images.json
         required: true
         default: images.json
         type: string

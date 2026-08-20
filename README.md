@@ -29,14 +29,14 @@ workflow 参数：
 
 | 参数 | 示例 | 说明 |
 | --- | --- | --- |
-| `operation` | `push` | 操作模式 |
-| `image` | `centos:7.9.2009` | 源镜像地址，当前默认不需要认证 |
-| `target_image` | `registry.cn-hangzhou.aliyuncs.com/acme/centos:7.9.2009` | 目标镜像地址；`publish=true` 时必填 |
-| `platforms` | `amd64` 或 `amd64,arm64` | 要复制的平台 |
+| `operation` | `push` | 选择推送、创建 Release，或两者都执行 |
+| `image` | `centos:7.9.2009` | `push` 填源镜像；`release` 可直接填要打包的镜像 |
+| `target_image` | `registry.cn-hangzhou.aliyuncs.com/acme/centos:7.9.2009` | 目标镜像地址，仅推送模式需要 |
+| `platforms` | `amd64` 或 `amd64,arm64` | 要处理的架构 |
 | `publish` | `true` | 是否推送到目标仓库 |
-| `package` | `false` | 是否生成 Docker 镜像归档并创建 Release |
+| `package` | `false` | `push` 模式是否生成归档；`release` 模式自动打包 |
 | `notify_hap` | `false` | 是否发送 HAP Webhook |
-| `manifest_file` | `images.json` | `release` 模式使用的已有镜像清单 |
+| `manifest_file` | `images.json` | `release` 未填写镜像时使用的清单 |
 
 ### Run workflow 页面怎么填写
 
