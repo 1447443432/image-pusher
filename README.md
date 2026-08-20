@@ -104,7 +104,7 @@ Push the image to the target registry: 勾选
 
 该模式会先复制镜像，再从目标镜像生成各架构 `.tar.gz`，最后创建 Release；即使不勾选 `Create Docker archives in push mode`，也会自动打包。
 
-说明：`release` 模式不读取 Source image、Target image 和 Architectures 字段；`push` 模式不读取 `images.json`。未启用的步骤会在 Actions 页面显示对应的 skipped summary。
+说明：`release` 模式填写镜像时使用 Source image 和 Architectures 字段，不使用 Target image；留空镜像时使用 `images.json`。`push` 模式不读取 `images.json`。未启用的步骤会在 Actions 页面显示对应的 skipped summary。
 
 向 `master` 分支推送代码时，workflow 会自动使用 `release` 模式，读取默认的 `images.json`，为清单中的已有镜像创建 Release。自动触发没有表单输入，不会执行源镜像复制，也不会自动发送 HAP 通知；需要手动推送镜像时，请使用 `Run workflow`。
 

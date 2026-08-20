@@ -68,6 +68,64 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
+      - name: Validate inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          OPERATION: ${{ inputs.operation }}
+          IMAGE: ${{ inputs.image }}
+          TARGET_IMAGE: ${{ inputs.target_image }}
+          PLATFORMS: ${{ inputs.platforms }}
+          PUBLISH: ${{ inputs.publish }}
+          PACKAGE: ${{ inputs.package }}
+          MANIFEST_FILE: ${{ inputs.manifest_file || 'images.json' }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+
+          event = os.environ["EVENT_NAME"]
+          operation = os.environ["OPERATION"]
+          image = os.environ["IMAGE"].strip()
+          target = os.environ["TARGET_IMAGE"].strip()
+          platforms = [item.replace("linux/", "") for item in re.split(r"[, ]+", os.environ["PLATFORMS"].strip()) if item]
+          valid_architectures = {"amd64", "arm64"}
+
+          def fail(message):
+              raise SystemExit(f"Input validation failed: {message}")
+
+          if event == "push" or (operation == "release" and not image):
+              try:
+                  with open(os.environ["MANIFEST_FILE"], encoding="utf-8") as f:
+                      manifest = json.load(f)
+              except Exception as exc:
+                  fail(f"cannot read {os.environ['MANIFEST_FILE']}: {exc}")
+              if not manifest.get("release_name"):
+                  fail("manifest release_name is required")
+              entries = manifest.get("images")
+              if not isinstance(entries, list) or not entries:
+                  fail("manifest images must be a non-empty array")
+              for index, item in enumerate(entries):
+                  if not item.get("image") or any(char.isspace() for char in item["image"]):
+                      fail(f"manifest images[{index}].image is invalid")
+                  if item.get("architecture") not in valid_architectures:
+                      fail(f"manifest images[{index}].architecture must be amd64 or arm64")
+          elif operation in {"push", "push-and-release"}:
+              if not image or any(char.isspace() for char in image):
+                  fail("image is required for push mode")
+              if os.environ["PUBLISH"] == "true" and not target:
+                  fail("target_image is required when publish is enabled")
+              if operation == "push-and-release" or os.environ["PACKAGE"] == "true":
+                  if os.environ["PUBLISH"] != "true":
+                      fail("push-and-release/package requires publish=true")
+          elif operation == "release":
+              if not image or any(char.isspace() for char in image):
+                  fail("image or manifest_file is required for release mode")
+          else:
+              fail("operation must be push, release, or push-and-release")
+
+          if event != "push" and (operation != "release" or image):
+              if not platforms or any(item not in valid_architectures for item in platforms):
+                  fail("platforms must contain amd64, arm64, or both")
+          PY
       - id: resolve
         env:
           OPERATION: ${{ inputs.operation }}
@@ -138,6 +196,7 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.release_tag }}
           name: ${{ needs.resolve.outputs.release_tag }}
           generate_release_notes: true
+          overwrite_files: true
           files: release-assets/*
       - name: Push image summary
         env:
@@ -252,6 +311,7 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.release_tag }}
           name: ${{ needs.resolve.outputs.release_tag }}
           generate_release_notes: true
+          overwrite_files: true
           files: release-assets/*
       - name: Create Release summary
         env:
